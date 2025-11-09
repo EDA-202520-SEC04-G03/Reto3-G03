@@ -1,4 +1,10 @@
 import time
+import csv
+import os
+
+csv.field_size_limit(2147483647)
+
+data_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "Data", "Challenge-3")
 
 def new_logic():
     """
