@@ -1,12 +1,16 @@
 import sys
+default_limit = 1000
+sys.setrecursionlimit(default_limit*10)
+import App.logic as logic
 
+from tabulate import tabulate
 
 def new_logic():
     """
         Se crea una instancia del controlador
     """
     #TODO: Llamar la función de la lógica donde se crean las estructuras de datos
-    pass
+    return logic.new_logic()
 
 def print_menu():
     print("Bienvenido")
@@ -24,15 +28,54 @@ def load_data(control):
     Carga los datos
     """
     #TODO: Realizar la carga de datos
-    pass
+    print("\n1. flights_large.csv")
+    print("2. flights_medium.csv")
+    print("3. flights_small.csv")
+    print("4. flight_test.csv\n")
+    tamano_archivo = int(input("Que tamaño de archivo quieres usar? (ingresa el número): "))
+
+    if tamano_archivo == 1:
+        flights_file = "flights_large.csv"
+    if tamano_archivo == 2:
+        flights_file = "flights_medium.csv"
+    if tamano_archivo == 3:
+        flights_file = "flights_small.csv"
+    if tamano_archivo == 4:
+        flights_file = "flights_test.csv"
+
+    catalog, report, tiempo_ms = logic.load_data(control, flights_file)
+
+    resumen = [
+        ["Archivo", flights_file],
+        ["Registros cargados", report["total_flights"]],
+        ["Tiempo de carga (ms)", round(tiempo_ms, 3)]
+    ]
+
+    print("\n=== Resumen de carga de datos de vuelos ===")
+    print(tabulate(resumen, headers=["Métrica", "Valor"], tablefmt="psql"))
+
+    print("\n=== Primeros 5 vuelos (por salida programada) ===")
+    print(tabulate(report["first5"], headers="keys", tablefmt="psql"))
+
+    print("\n=== Últimos 5 vuelos (por salida programada) ===")
+    print(tabulate(report["last5"], headers="keys", tablefmt="psql"))
+
+    return catalog
 
 
 def print_data(control, id):
     """
         Función que imprime un dato dado su ID
     """
-    #TODO: Realizar la función para imprimir un elemento
-    pass
+    reg = logic.get_data(control, id)
+    if reg is None:
+        print(f"No se encontró el vuelo con id = {id}")
+        return
+
+    fila = [logic.row_load_output(reg)]
+
+    print("\n=== Información del vuelo buscado ===")
+    print(tabulate(fila, headers="keys", tablefmt="psql"))
 
 def print_req_1(control):
     """
