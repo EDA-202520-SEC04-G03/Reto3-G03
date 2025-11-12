@@ -319,12 +319,95 @@ def get_data(catalog, id):
     return find_by_flight_id_node(root, id)
 
 
-def req_1(catalog):
+def req_1(catalog, carrier_code, min_delay, max_delay):
     """
     Retorna el resultado del requerimiento 1
+    Identifica vuelos con retraso en salida dentro de un rango específico para una aerolínea
+    
+    Args:
+        catalog: Catálogo con los datos de vuelos
+        carrier_code: Código de la aerolínea (ej: "UA")
+        min_delay: Límite inferior del rango de retraso en minutos
+        max_delay: Límite superior del rango de retraso en minutos
+    
+    Returns:
+        dict con los resultados del requerimiento
     """
-    # TODO: Modificar el requerimiento 1
-    pass
+    start = get_time()
+    
+    # Lista para almacenar vuelos que cumplen los criterios
+    matching_flights = []
+    
+    # Recorrer todos los vuelos del árbol
+    def traverse_tree(node):
+        if node is None:
+            return
+        
+        # Recorrer subárbol izquierdo
+        traverse_tree(node["left"])
+        
+        # Procesar nodo actual
+        flight = node["value"]
+        if flight is not None:
+            # Verificar que sea de la aerolínea correcta
+            if flight.get("carrier") == carrier_code:
+                dep_delay = flight.get("dep_delay_min")
+                
+                # Verificar que el retraso esté en el rango
+                # Un retraso positivo indica que salió tarde
+                if dep_delay is not None and min_delay <= dep_delay <= max_delay:
+                    matching_flights.append(flight)
+        
+        # Recorrer subárbol derecho
+        traverse_tree(node["right"])
+    
+    # Iniciar recorrido desde la raíz
+    traverse_tree(catalog["flights"]["root"])
+    
+    # Ordenar por retraso ascendente (menor a mayor)
+    # Si hay empate en retraso, ordenar por fecha y hora REAL de salida cronológicamente
+    matching_flights.sort(key=lambda f: (
+        f.get("dep_delay_min") if f.get("dep_delay_min") is not None else float('inf'),
+        f.get("dep_dt") if f.get("dep_dt") is not None else datetime.max
+    ))
+    
+    end = get_time()
+    exec_time = delta_time(start, end)
+    
+    total_flights = len(matching_flights)
+    
+    # Preparar vuelos para mostrar (primeros 5 y últimos 5)
+    first_5 = matching_flights[:5] if total_flights > 0 else []
+    last_5 = matching_flights[-5:] if total_flights > 5 else []
+    
+    # Formatear vuelos para salida
+    def format_flight(flight):
+        dep_delay = flight.get("dep_delay_min")
+        return {
+            "id": flight.get("id") or "Unknown",
+            "flight_code": flight.get("flight_code") or "Unknown",
+            "date": fmt_date(flight.get("date")),
+            "carrier": flight.get("carrier") or "Unknown",
+            "airline_name": flight.get("airline_name") or "Unknown",
+            "origin": flight.get("origin") or "Unknown",
+            "dest": flight.get("dest") or "Unknown",
+            "sched_dep_time": fmt_hhmm(flight.get("sched_dep_dt")),
+            "dep_time_real": fmt_hhmm(flight.get("dep_dt")),
+            "dep_delay_min": "Unknown" if dep_delay is None else round(dep_delay, 2)
+        }
+    
+    first_5_formatted = [format_flight(f) for f in first_5]
+    last_5_formatted = [format_flight(f) for f in last_5]
+    
+    return {
+        "exec_time_ms": exec_time,
+        "carrier_code": carrier_code,
+        "min_delay": min_delay,
+        "max_delay": max_delay,
+        "total_flights": total_flights,
+        "first_5": first_5_formatted,
+        "last_5": last_5_formatted
+    }
 
 
 def req_2(catalog):
@@ -343,12 +426,161 @@ def req_3(catalog):
     pass
 
 
-def req_4(catalog):
+def req_4(catalog, date_initial, date_final, hour_initial, hour_final, top_n):
     """
     Retorna el resultado del requerimiento 4
+    Identifica las N aerolíneas con mayor número de vuelos en un rango de fechas
+    y franja horaria, y obtiene el vuelo con menor duración de cada una.
+    
+    Args:
+        catalog: Catálogo con los datos de vuelos
+        date_initial: Fecha inicial del rango (formato YYYY-MM-DD)
+        date_final: Fecha final del rango (formato YYYY-MM-DD)
+        hour_initial: Hora inicial de la franja (formato HH:MM)
+        hour_final: Hora final de la franja (formato HH:MM)
+        top_n: Número de aerolíneas a retornar
+    
+    Returns:
+        dict con los resultados del requerimiento
     """
-    # TODO: Modificar el requerimiento 4
-    pass
+    start = get_time()
+    
+    # Parsear las fechas y horas de entrada
+    fecha_ini = parse_date(date_initial)
+    fecha_fin = parse_date(date_final)
+    hora_ini = parse_hhmm(hour_initial)
+    hora_fin = parse_hhmm(hour_final)
+    
+    # Diccionario para contar vuelos por aerolínea
+    # Key: carrier_code, Value: dict con info de la aerolínea
+    airlines_data = {}
+    
+    # Recorrer todos los vuelos del árbol
+    def traverse_tree(node):
+        if node is None:
+            return
+        
+        # Recorrer subárbol izquierdo
+        traverse_tree(node["left"])
+        
+        # Procesar nodo actual
+        flight = node["value"]
+        if flight is not None:
+            flight_date = flight.get("date")
+            sched_dep_dt = flight.get("sched_dep_dt")
+            carrier = flight.get("carrier")
+            duration = flight.get("duration_min")
+            
+            # Verificar que tengamos todos los datos necesarios
+            if (flight_date is not None and sched_dep_dt is not None and 
+                carrier is not None and carrier != "Unknown" and
+                duration is not None):
+                
+                # Verificar que la fecha esté en el rango
+                if fecha_ini <= flight_date <= fecha_fin:
+                    # Obtener la hora programada de salida
+                    sched_hour = sched_dep_dt.hour
+                    sched_minute = sched_dep_dt.minute
+                    
+                    # Crear objeto time para comparar
+                    flight_time = dtime(hour=sched_hour, minute=sched_minute)
+                    
+                    # Verificar que la hora esté en la franja
+                    if hora_ini <= flight_time <= hora_fin:
+                        # Si la aerolínea no está en el diccionario, inicializarla
+                        if carrier not in airlines_data:
+                            airlines_data[carrier] = {
+                                "carrier_code": carrier,
+                                "airline_name": flight.get("airline_name") or "Unknown",
+                                "total_flights": 0,
+                                "total_duration": 0.0,
+                                "total_distance": 0.0,
+                                "shortest_flight": None
+                            }
+                        
+                        # Incrementar contador de vuelos
+                        airlines_data[carrier]["total_flights"] += 1
+                        
+                        # Acumular duración
+                        airlines_data[carrier]["total_duration"] += duration
+                        
+                        # Acumular distancia si existe
+                        distance = flight.get("distance_mi")
+                        if distance is not None:
+                            airlines_data[carrier]["total_distance"] += distance
+                        
+                        # Actualizar vuelo con menor duración
+                        current_shortest = airlines_data[carrier]["shortest_flight"]
+                        if current_shortest is None:
+                            airlines_data[carrier]["shortest_flight"] = flight
+                        else:
+                            current_duration = current_shortest.get("duration_min")
+                            if duration < current_duration:
+                                airlines_data[carrier]["shortest_flight"] = flight
+                            elif duration == current_duration:
+                                # Desempate por fecha-hora programada de salida
+                                if sched_dep_dt < current_shortest.get("sched_dep_dt"):
+                                    airlines_data[carrier]["shortest_flight"] = flight
+        
+        # Recorrer subárbol derecho
+        traverse_tree(node["right"])
+    
+    # Iniciar recorrido desde la raíz
+    traverse_tree(catalog["flights"]["root"])
+    
+    # Convertir diccionario a lista
+    airlines_list = list(airlines_data.values())
+    
+    # Ordenar por número total de vuelos (descendente)
+    # Si hay empate, ordenar alfabéticamente por código de aerolínea
+    airlines_list.sort(key=lambda a: (-a["total_flights"], a["carrier_code"]))
+    
+    # Tomar solo las top N aerolíneas
+    top_airlines = airlines_list[:top_n]
+    
+    # Calcular promedios para cada aerolínea
+    for airline in top_airlines:
+        total_flights = airline["total_flights"]
+        if total_flights > 0:
+            airline["avg_duration"] = airline["total_duration"] / total_flights
+            airline["avg_distance"] = airline["total_distance"] / total_flights
+        else:
+            airline["avg_duration"] = 0.0
+            airline["avg_distance"] = 0.0
+    
+    end = get_time()
+    exec_time = delta_time(start, end)
+    
+    # Formatear resultado
+    def format_airline(airline):
+        shortest = airline["shortest_flight"]
+        return {
+            "carrier_code": airline["carrier_code"],
+            "airline_name": airline["airline_name"],
+            "total_flights": airline["total_flights"],
+            "avg_duration_min": round(airline["avg_duration"], 2),
+            "avg_distance_mi": round(airline["avg_distance"], 2),
+            "shortest_flight": {
+                "id": shortest.get("id") or "Unknown",
+                "flight_code": shortest.get("flight_code") or "Unknown",
+                "date": fmt_date(shortest.get("date")),
+                "sched_dep_time": fmt_hhmm(shortest.get("sched_dep_dt")),
+                "origin": shortest.get("origin") or "Unknown",
+                "dest": shortest.get("dest") or "Unknown",
+                "duration_min": round(shortest.get("duration_min"), 2)
+            }
+        }
+    
+    formatted_airlines = [format_airline(a) for a in top_airlines]
+    
+    return {
+        "exec_time_ms": exec_time,
+        "date_range": f"{date_initial} a {date_final}",
+        "time_range": f"{hour_initial} a {hour_final}",
+        "top_n": top_n,
+        "total_airlines": len(airlines_list),
+        "airlines": formatted_airlines
+    }
 
 
 def req_5(catalog):
