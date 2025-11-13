@@ -132,8 +132,51 @@ def print_req_2(control):
     """
         Función que imprime la solución del Requerimiento 2 en consola
     """
-    # TODO: Imprimir el resultado del requerimiento 2
-    pass
+    print("\n" + "="*80)
+    print("Req No. 2: Vuelos con anticipo en la llegada por aeropuerto destino")
+    print("="*80)
+
+        # Solicitar parámetros al usuario
+    dest_code = input("\nIngrese el código del aeropuerto de destino (ej: JFK, LGA): ").strip().upper()
+    min_early = float(input("Ingrese el límite inferior del rango de anticipo (minutos, valor positivo): "))
+    max_early = float(input("Ingrese el límite superior del rango de anticipo (minutos, valor positivo): "))
+    
+        # Ejecutar el requerimiento
+    print("\nBuscando vuelos con anticipo en la llegada...\n")
+    result = logic.req_2(control, dest_code, min_early, max_early)
+
+    # Mostrar resumen
+    resumen = [
+        ["Aeropuerto destino", result["dest_code"]],
+        ["Rango de anticipo (min)", f"[{result['min_early']}, {result['max_early']}]"],
+        ["Total de vuelos encontrados", result["total_flights"]],
+        ["Tiempo de ejecución (ms)", round(result["exec_time_ms"], 3)]
+    ]
+
+    print("="*80)
+    print("RESUMEN DE BÚSQUEDA")
+    print("="*80)
+    print(tabulate(resumen, headers=["Parámetro", "Valor"], tablefmt="psql"))
+
+    # Mostrar resultados
+    if result["total_flights"] > 0:
+        # Mostrar primeros 5 vuelos
+        if len(result["first_5"]) > 0:
+            print("\n" + "="*80)
+            print("PRIMEROS 5 VUELOS (menor anticipo en llegada)")
+            print("="*80)
+            print(tabulate(result["first_5"], headers="keys", tablefmt="psql"))
+
+        # Mostrar últimos 5 vuelos
+        if result["total_flights"] > 5 and len(result["last_5"]) > 0:
+            print("\n" + "="*80)
+            print("ÚLTIMOS 5 VUELOS (mayor anticipo en llegada)")
+            print("="*80)
+            print(tabulate(result["last_5"], headers="keys", tablefmt="psql"))
+    else:
+        print("\nNo se encontraron vuelos que cumplan con los criterios especificados.")
+
+    print("\n" + "="*80)
 
 
 def print_req_3(control):
@@ -222,8 +265,77 @@ def print_req_5(control):
     """
         Función que imprime la solución del Requerimiento 5 en consola
     """
-    # TODO: Imprimir el resultado del requerimiento 5
-    pass
+    print("\n" + "="*80)
+    print("Req No. 5: Aerolíneas más puntuales por aeropuerto de destino")
+    print("="*80)
+
+        # Solicitar parámetros al usuario
+    print("\nIngrese el rango de fechas (formato YYYY-MM-DD):")
+    date_initial = input("Fecha inicial: ").strip()
+    date_final = input("Fecha final: ").strip()
+    
+    dest_code = input("\nIngrese el código del aeropuerto de destino (ej: JFK, LGA): ").strip().upper()
+    top_n = int(input("Ingrese el número de aerolíneas a mostrar (N): "))
+
+    # Ejecutar el requerimiento
+    print("\nBuscando aerolíneas más puntuales en la llegada...\n")
+    result = logic.req_5(control, date_initial, date_final, dest_code, top_n)
+
+    # Mostrar resumen
+    resumen = [
+        ["Rango de fechas", result["date_range"]],
+        ["Aeropuerto destino", result["dest_code"]],
+        ["Top N solicitado", result["top_n"]],
+        ["Total aerolíneas analizadas", result["total_airlines"]],
+        ["Tiempo de ejecución (ms)", round(result["exec_time_ms"], 3)]
+    ]
+
+    print("="*80)
+    print("RESUMEN DE BÚSQUEDA")
+    print("="*80)
+    print(tabulate(resumen, headers=["Parámetro", "Valor"], tablefmt="psql"))
+
+    # Mostrar resultados por aerolínea
+    if len(result["airlines"]) > 0:
+        for i, airline in enumerate(result["airlines"], 1):
+            print("\n" + "="*80)
+            print(f"AEROLÍNEA #{i}: {airline['carrier_code']} - {airline['airline_name']}")
+            print("="*80)
+
+            # Información general de la aerolínea
+            info_general = [
+                ["Código aerolínea", airline["carrier_code"]],
+                ["Nombre aerolínea", airline["airline_name"]],
+                ["Total vuelos", airline["total_flights"]],
+                ["Duración promedio (min)", airline["avg_duration_min"]],
+                ["Distancia promedio (mi)", airline["avg_distance_mi"]],
+                ["Puntualidad promedio llegada (min)", airline["avg_arr_delay_min"]]
+            ]
+            print(tabulate(info_general, headers=["Métrica", "Valor"], tablefmt="psql"))
+
+            # Información del vuelo con mayor distancia
+            best = airline["best_distance_flight"]
+            if best is not None:
+                info_best = [
+                    ["ID", best["id"]],
+                    ["Código vuelo", best["flight_code"]],
+                    ["Fecha", best["date"]],
+                    ["Hora real llegada", best["arr_time_real"]],
+                    ["Aeropuerto origen", best["origin"]],
+                    ["Aeropuerto destino", best["dest"]],
+                    ["Duración (min)", best["duration_min"]],
+                    ["Distancia (mi)", best["distance_mi"]]
+                ]
+
+                print("\nVUELO CON MAYOR DISTANCIA RECORRIDA:")
+                print(tabulate(info_best, headers=["Campo", "Valor"], tablefmt="psql"))
+            else:
+                print("\nNo se encontró un vuelo representativo para esta aerolínea.")
+    else:
+        print("\nNo se encontraron aerolíneas que cumplan con los criterios especificados.")
+
+    print("\n" + "="*80)
+
 
 
 def print_req_6(control):
@@ -264,7 +376,7 @@ def main():
         elif int(inputs) == 5:
             print_req_5(control)
 
-        elif int(inputs) == 5:
+        elif int(inputs) == 6:
             print_req_6(control)
 
         elif int(inputs) == 7:

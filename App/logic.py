@@ -410,12 +410,123 @@ def req_1(catalog, carrier_code, min_delay, max_delay):
     }
 
 
-def req_2(catalog):
-    """
-    Retorna el resultado del requerimiento 2
-    """
-    # TODO: Modificar el requerimiento 2
-    pass
+
+def req_2(catalog, dest_code, min_early, max_early):
+    
+    start = get_time()
+
+    # Asegurar que min_early <= max_early
+    if min_early > max_early:
+        tmp = min_early
+        min_early = max_early
+        max_early = tmp
+
+    # Convertimos el rango de anticipo positivo a rango de "delay" negativo
+    # Ej: [10, 30] -> arr_delay_min en [-30, -10]
+    delay_min = -max_early
+    delay_max = -min_early
+
+    matching_flights = []
+
+    def traverse(node):
+        if node is None:
+            return
+
+        traverse(node["left"])
+
+        flight = node["value"]
+        if flight is not None:
+            dest = flight.get("dest")
+            arr_delay = flight.get("arr_delay_min")
+
+            if dest == dest_code and arr_delay is not None:
+                # Solo anticipos (valores negativos) dentro del rango
+                if arr_delay < 0 and delay_min <= arr_delay <= delay_max:
+                    matching_flights.append(flight)
+
+        traverse(node["right"])
+
+    traverse(catalog["flights"]["root"])
+
+    # Función de llave de ordenamiento definida DENTRO del req_2
+    def sort_key(flight):
+        """
+        Llave de ordenamiento para req_2:
+        - Primero por minutos de anticipo (positivo)
+        - Luego por fecha/hora real de llegada
+        """
+        arr_delay = flight.get("arr_delay_min")
+        if arr_delay is None:
+            anticip = float("inf")
+        else:
+            if arr_delay < 0:
+                anticip = -arr_delay
+            else:
+                anticip = float("inf")
+
+        arr_dt = flight.get("arr_dt")
+        if arr_dt is None:
+            arr_dt = datetime.max
+
+        return (anticip, arr_dt)
+
+    # Ordenar por anticipo ascendente (10, 11, 12, ...)
+    matching_flights.sort(key=sort_key)
+
+    end = get_time()
+    exec_time = delta_time(start, end)
+    total_flights = len(matching_flights)
+
+    # Primeros 5 y últimos 5 según el enunciado
+    if total_flights > 0:
+        first_5 = matching_flights[:5]
+    else:
+        first_5 = []
+
+    if total_flights > 5:
+        last_5 = matching_flights[-5:]
+    else:
+        last_5 = []
+
+    def format_flight(flight):
+        arr_delay = flight.get("arr_delay_min")
+        if arr_delay is not None and arr_delay < 0:
+            anticip = -arr_delay
+        else:
+            anticip = None
+
+        return {
+            "id": flight.get("id") or "Unknown",
+            "flight_code": flight.get("flight_code") or "Unknown",
+            "date": fmt_date(flight.get("date")),
+            "carrier": flight.get("carrier") or "Unknown",
+            "airline_name": flight.get("airline_name") or "Unknown",
+            "origin": flight.get("origin") or "Unknown",
+            "dest": flight.get("dest") or "Unknown",
+            "sched_arr_time": fmt_hhmm(flight.get("sched_arr_dt")),
+            "arr_time_real": fmt_hhmm(flight.get("arr_dt")),
+            "early_min": "Unknown" if anticip is None else round(anticip, 2)
+        }
+
+    first_5_formatted = []
+    for f in first_5:
+        first_5_formatted.append(format_flight(f))
+
+    last_5_formatted = []
+    for f in last_5:
+        last_5_formatted.append(format_flight(f))
+
+    result = {
+        "exec_time_ms": exec_time,
+        "dest_code": dest_code,
+        "min_early": min_early,
+        "max_early": max_early,
+        "total_flights": total_flights,
+        "first_5": first_5_formatted,
+        "last_5": last_5_formatted
+    }
+
+    return result
 
 
 def req_3(catalog):
@@ -583,12 +694,170 @@ def req_4(catalog, date_initial, date_final, hour_initial, hour_final, top_n):
     }
 
 
-def req_5(catalog):
+def req_5(catalog, date_initial, date_final, dest_code, top_n):
     """
-    Retorna el resultado del requerimiento 5
+    Requerimiento 5:
+    Para un aeropuerto de destino y un rango de fechas, identificar las N aerolíneas
+    con vuelos más puntuales y, de cada una, obtener el vuelo con la mayor distancia.
+
+    Parámetros:
+        catalog: catálogo con los datos de vuelos
+        date_initial: fecha inicial (YYYY-MM-DD)
+        date_final: fecha final (YYYY-MM-DD)
+        dest_code: código del aeropuerto de destino (ej: "JFK")
+        top_n: cantidad de aerolíneas a listar
     """
-    # TODO: Modificar el requerimiento 5
-    pass
+    start = get_time()
+
+    fecha_ini = parse_date(date_initial)
+    fecha_fin = parse_date(date_final)
+
+    airlines_data = {}
+
+    def traverse(node):
+        if node is None:
+            return
+
+        traverse(node["left"])
+
+        flight = node["value"]
+        if flight is not None:
+            flight_date = flight.get("date")
+            dest = flight.get("dest")
+            carrier = flight.get("carrier")
+            arr_delay = flight.get("arr_delay_min")
+
+            if (flight_date is not None and
+                carrier is not None and carrier != "Unknown" and
+                dest == dest_code and
+                arr_delay is not None and
+                fecha_ini <= flight_date <= fecha_fin):
+
+                if carrier not in airlines_data:
+                    airlines_data[carrier] = {
+                        "carrier_code": carrier,
+                        "airline_name": flight.get("airline_name") or "Unknown",
+                        "total_flights": 0,
+                        "total_duration": 0.0,
+                        "total_distance": 0.0,
+                        "sum_arr_delay": 0.0,
+                        "count_delay": 0,
+                        "max_distance_flight": None
+                    }
+
+                info = airlines_data[carrier]
+
+                info["total_flights"] += 1
+
+                duration = flight.get("duration_min")
+                if duration is not None:
+                    info["total_duration"] += duration
+
+                distance = flight.get("distance_mi")
+                if distance is not None:
+                    info["total_distance"] += distance
+
+                info["sum_arr_delay"] += arr_delay
+                info["count_delay"] += 1
+
+                # Actualizar vuelo con mayor distancia
+                current_best = info["max_distance_flight"]
+                if distance is not None:
+                    if current_best is None:
+                        info["max_distance_flight"] = flight
+                    else:
+                        best_dist = current_best.get("distance_mi")
+                        if best_dist is None or distance > best_dist:
+                            info["max_distance_flight"] = flight
+                        elif distance == best_dist:
+                            current_dt = current_best.get("arr_dt")
+                            new_dt = flight.get("arr_dt")
+                            if current_dt is not None and new_dt is not None:
+                                if new_dt < current_dt:
+                                    info["max_distance_flight"] = flight
+
+        traverse(node["right"])
+
+    traverse(catalog["flights"]["root"])
+
+    airlines_list = []
+
+    for carrier_code in airlines_data:
+        info = airlines_data[carrier_code]
+        if info["count_delay"] == 0:
+            continue
+
+        avg_delay = info["sum_arr_delay"] / info["count_delay"]
+
+        if info["total_flights"] > 0:
+            avg_duration = info["total_duration"] / info["total_flights"]
+            avg_distance = info["total_distance"] / info["total_flights"]
+        else:
+            avg_duration = 0.0
+            avg_distance = 0.0
+
+        info["avg_arr_delay_min"] = avg_delay
+        info["avg_duration_min"] = avg_duration
+        info["avg_distance_mi"] = avg_distance
+
+        airlines_list.append(info)
+
+    # Función de ordenamiento definida DENTRO de req_5
+    def sort_key(airline_info):
+        avg_delay_val = airline_info["avg_arr_delay_min"]
+        if avg_delay_val < 0:
+            valor = -avg_delay_val
+        else:
+            valor = avg_delay_val
+        return (valor, airline_info["carrier_code"])
+
+    airlines_list.sort(key=sort_key)
+
+    top_airlines = airlines_list[:top_n]
+
+    end = get_time()
+    exec_time = delta_time(start, end)
+
+    def format_airline(info):
+        flight = info["max_distance_flight"]
+        if flight is not None:
+            flight_block = {
+                "id": flight.get("id") or "Unknown",
+                "flight_code": flight.get("flight_code") or "Unknown",
+                "date": fmt_date(flight.get("date")),
+                "arr_time_real": fmt_hhmm(flight.get("arr_dt")),
+                "origin": flight.get("origin") or "Unknown",
+                "dest": flight.get("dest") or "Unknown",
+                "duration_min": "Unknown" if flight.get("duration_min") is None else round(flight.get("duration_min"), 2),
+                "distance_mi": "Unknown" if flight.get("distance_mi") is None else round(flight.get("distance_mi"), 2)
+            }
+        else:
+            flight_block = None
+
+        return {
+            "carrier_code": info["carrier_code"],
+            "airline_name": info["airline_name"],
+            "total_flights": info["total_flights"],
+            "avg_duration_min": round(info["avg_duration_min"], 2),
+            "avg_distance_mi": round(info["avg_distance_mi"], 2),
+            "avg_arr_delay_min": round(info["avg_arr_delay_min"], 2),
+            "best_distance_flight": flight_block
+        }
+
+    formatted_airlines = []
+    for info in top_airlines:
+        formatted_airlines.append(format_airline(info))
+
+    result = {
+        "exec_time_ms": exec_time,
+        "date_range": f"{date_initial} a {date_final}",
+        "dest_code": dest_code,
+        "top_n": top_n,
+        "total_airlines": len(airlines_list),
+        "airlines": formatted_airlines
+    }
+
+    return result
 
 def req_6(catalog):
     """
