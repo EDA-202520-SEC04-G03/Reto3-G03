@@ -3,6 +3,9 @@ import csv
 import os
 from datetime import datetime, date, time as dtime, timedelta
 
+import DataStructures.List.array_list as al
+import DataStructures.List.single_linked_list as sll
+import DataStructures.Map.map_separate_chaining as mp
 import DataStructures.Tree.binary_search_tree as bst
 import DataStructures.Tree.red_black_tree as rbt 
 import DataStructures.Priority_queue.priority_queue as pq
@@ -529,12 +532,122 @@ def req_2(catalog, dest_code, min_early, max_early):
     return result
 
 
-def req_3(catalog):
+def req_3(catalog, carrier_code, dest_code, min_distance, max_distance):
     """
     Retorna el resultado del requerimiento 3
     """
     # TODO: Modificar el requerimiento 3
-    pass
+    start = get_time()
+
+    # Asegurar que min_distance <= max_distance
+    if min_distance > max_distance:
+        tmp = min_distance
+        min_distance = max_distance
+        max_distance = tmp
+
+    # Lista array_list donde guardaremos los vuelos que cumplen
+    matching_flights = al.new_list()
+
+
+    # Obtenemos TODOS los valores del RBT en orden
+    all_values_list = rbt.values(catalog["flights"], None, None)
+
+    size_values = sll.size(all_values_list)
+    for i in range(size_values):
+        flight = sll.get_element(all_values_list, i)
+
+        if flight is not None:
+            carrier = flight["carrier"]
+            dest = flight["dest"]
+            dist = flight["distance_mi"]
+
+            if (carrier == carrier_code and dest == dest_code and dist is not None and min_distance <= dist <= max_distance):
+                al.add_last(matching_flights, flight)
+
+    # Ordenar usando quick_sort
+    # Definimos sort_criteria para req3
+    def sort_criteria_req3(f1, f2):
+        d1 = f1["distance_mi"]
+        d2 = f2["distance_mi"]
+
+        if (d1 == "Unknown" and d2 == "Unknown") or (d1 == d2):
+            # Ninguna tiene distancia válida, pasamos a comparar por fecha
+            t1 = f1["arr_dt"]
+            t2 = f2["arr_dt"]
+
+            # Si tampoco hay fechas, no imponemos orden
+            if t1 == "Unknown" and t2 == "Unknown":
+                return False
+            if t1 == "Unknown":
+                return False    # f1 no tiene fecha va después
+            if t2 == "Unknown":
+                return True     # f1 tiene fecha y f2 no f1 antes
+
+            return t1 < t2
+
+        if d1 == "Unknown":
+            # f1 no tiene distancia, f2 sí -> f1 debe ir DESPUÉS de f2
+            return False
+
+        if d2 == "Unknown":
+            # f2 no tiene distancia, f1 sí -> f1 debe ir ANTES de f2
+            return True
+
+        if d1 < d2:
+            return True
+        if d1 > d2:
+            return False
+        
+        return False
+
+
+    matching_flights = al.quick_sort(matching_flights, sort_crit=sort_criteria_req3)
+
+    end = get_time()
+    exec_time = delta_time(start, end)
+    total_flights = al.size(matching_flights)
+
+
+    # Si hay más de 10, devolver primeros 5 y últimos 5
+    if total_flights > 10:
+        first_5 = al.sub_list(matching_flights, 0, 5)["elements"]
+        last_5 = al.sub_list(matching_flights, total_flights - 5, 5)["elements"]
+    else:
+        # Si hay 10 o menos, se pueden mostrar todos (la vista decide cómo imprimir)
+        first_5 = matching_flights
+        last_5 = matching_flights
+
+    def format_flight(flight):
+        dist = flight["distance_mi"]
+        return {
+            "id": flight["id"],
+            "flight_code": flight["flight_code"],
+            "date": fmt_date(flight["date"]),
+            "airline_name": flight["airline_name"],
+            "carrier": flight["carrier"],
+            "origin": flight["origin"],
+            "dest": flight["dest"],
+            "distance_mi": dist
+        }
+
+    first_5_formatted = al.new_list()
+    last_5_formatted = al.new_list()
+
+    for f in first_5:
+        al.add_last(first_5_formatted, format_flight(f))
+    for f in first_5:
+        al.add_last(last_5_formatted, format_flight(f))
+
+    return {
+        "exec_time_ms": exec_time,
+        "carrier_code": carrier_code,
+        "dest_code": dest_code,
+        "min_distance": min_distance,
+        "max_distance": max_distance,
+        "total_flights": total_flights,
+        "first_5": first_5_formatted,
+        "last_5": last_5_formatted
+    }
 
 
 def req_4(catalog, date_initial, date_final, hour_initial, hour_final, top_n):
@@ -859,12 +972,176 @@ def req_5(catalog, date_initial, date_final, dest_code, top_n):
 
     return result
 
-def req_6(catalog):
+def req_6(catalog, date_initial, date_final, min_distance, max_distance, top_m):
     """
     Retorna el resultado del requerimiento 6
     """
     # TODO: Modificar el requerimiento 6
-    pass
+    start = get_time()
+
+    # Parsear fechas
+    fecha_ini = parse_date(date_initial)
+    fecha_fin = parse_date(date_final)
+
+    # Si las fechas vienen invertidas, corregir
+    if fecha_ini != "Unknown" and fecha_fin != "Unknown" and fecha_ini > fecha_fin:
+        tmp_fecha = fecha_ini
+        fecha_ini = fecha_fin
+        fecha_fin = tmp_fecha
+
+    # Asegurar que min_distance <= max_distance
+    if min_distance > max_distance:
+        tmp = min_distance
+        min_distance = max_distance
+        max_distance = tmp
+
+    airlines_data = mp.new_map(1024, 0.8)
+
+    # Aca creamos un ssl con los values de los vuelos    
+    all_values_list = rbt.values(catalog["flights"], None, None)
+    size_values = sll.size(all_values_list)
+
+    for i in range(size_values):
+        flight = sll.get_element(all_values_list, i)
+
+        flight_date = flight["date"]
+        dist = flight["distance_mi"]
+        carrier = flight["carrier"]
+        delay = flight["dep_delay_min"]
+
+        # Filtro por rango de fechas y distancia, con datos válidos
+        if flight_date != "Unknown" and carrier != "Unknown" and dist != "Unknown" and delay != "Unknown" and fecha_ini != "Unknown" and fecha_fin != "Unknown" and fecha_ini <= flight_date <= fecha_fin and min_distance <= dist <= max_distance:
+
+            entry = mp.get(airlines_data, carrier)
+
+            if entry is None:
+                info = {
+                    "carrier_code": carrier,
+                    "airline_name": flight["airline_name"],
+                    "delays": al.new_list(),
+                    "flights": al.new_list()
+                }
+                mp.put(airlines_data, carrier, info)
+            else:
+                info = me.get_value(entry)
+
+            lt.add_last(info["delays"], delay)
+            lt.add_last(info["flights"], flight)
+
+    # Construimos una lista de aerolíneas con sus métricas
+    # lista con TODOS los "info"
+    airlines_values = mp.value_set(airlines_data)
+    size_vals = sll.size(airlines_values)
+
+    airlines_list = al.new_list()
+
+    for i in range(size_vals):
+        info = mp.get_element(airlines_values, i)
+        carrier_code = info["carrier_code"]
+
+        delays = info["delays"]
+        n = al.size(delays)
+        if n != 0:
+            # Cálculo de promedio y desviación estándar
+            sum_delay = 0.0
+            sum_sq = 0.0
+            for j in range(n):
+                d = al.get_element(delays, j)
+                sum_delay += d
+                sum_sq += d**2
+
+            avg_delay = sum_delay / n
+            variance = (sum_sq / n) - (avg_delay * avg_delay)
+            if variance < 0:
+                variance = 0.0
+            std_delay = variance ** 0.5
+
+            # Encontrar el vuelo con retraso más cercano al promedio
+            best_flight = None
+            best_diff = None
+
+            f = al.size(info["flights"])
+            for j in range(f):
+                flight = al.get_element(info["flights"], j)
+                d = flight["dep_delay_min"]
+                if d != "Unknown":
+                    diff = abs(d - avg_delay)
+                    if best_diff is None:
+                        best_diff = diff
+                        best_flight = flight
+                    else:
+                        if diff < best_diff:
+                            best_diff = diff
+                            best_flight = flight
+                        elif diff == best_diff:
+                            # Desempate: fecha-hora real de salida más temprana
+                            dep_dt = flight["dep_dt"]
+                            if best_flight != None:
+                                best_dep_dt = best_flight["dep_dt"] 
+                            else: 
+                                best_dep_dt = None
+                            if dep_dt != "Unknown" and best_dep_dt != None and dep_dt < best_dep_dt:
+                                best_flight = flight
+
+                al.add_last(airlines_list, {
+                    "carrier_code": carrier_code,
+                    "airline_name": info["airline_name"],
+                    "total_flights": n,
+                    "avg_delay": avg_delay,
+                    "std_delay": std_delay,
+                    "best_flight": best_flight
+                })
+                
+
+    # Ordenar por estabilidad (desviación estándar ascendente),
+    # luego por promedio de retraso ascendente
+    def sort_airlines(a):
+        return (a["std_delay"], a["avg_delay"])
+
+    lt.quick_sort(airlines_list, sort_crit=sort_airlines)
+
+    # Tomar el top de M más estables
+    top_airlines = al.sub_list(airlines_list, 0, top_m)
+
+    end = get_time()
+    exec_time = delta_time(start, end)
+
+    def format_airline(a):
+        flight = a["best_flight"]
+        if flight is not None:
+            dep_dt = flight["dep_dt"]
+            flight_block = {
+                "id": flight["id"],
+                "flight_code": flight["flight_code"],
+                "dep_datetime": fmt_date(dep_dt),
+                "origin": flight["origin"],
+                "dest": flight["dest"],
+            }
+        else:
+            flight_block = None
+
+        return {
+            "carrier_code": a["carrier_code"],
+            "airline_name": a["airline_name"],
+            "total_flights": a["total_flights"],
+            "avg_dep_delay_min": a["avg_delay"],
+            "std_dep_delay_min": a["std_delay"],
+            "closest_flight": flight_block
+        }
+
+    formatted_airlines = al.new_list()
+    for a in top_airlines:
+        al.add_last(formatted_airlines, format_airline(a))
+
+    return {
+        "exec_time_ms": exec_time,
+        "date_range": f"{date_initial} a {date_final}",
+        "distance_range": f"{min_distance} a {max_distance}",
+        "top_m": top_m,
+        "total_airlines": al.size(airlines_list),
+        "airlines": formatted_airlines
+    }
+
 
 
 # Funciones para medir tiempos de ejecucion
