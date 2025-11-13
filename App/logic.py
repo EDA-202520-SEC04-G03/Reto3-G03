@@ -326,20 +326,13 @@ def req_1(catalog, carrier_code, min_delay, max_delay):
     """
     Retorna el resultado del requerimiento 1
     Identifica vuelos con retraso en salida dentro de un rango específico para una aerolínea
-    
-    Args:
-        catalog: Catálogo con los datos de vuelos
-        carrier_code: Código de la aerolínea (ej: "UA")
-        min_delay: Límite inferior del rango de retraso en minutos
-        max_delay: Límite superior del rango de retraso en minutos
-    
-    Returns:
-        dict con los resultados del requerimiento
     """
+    
+    
     start = get_time()
     
     # Lista para almacenar vuelos que cumplen los criterios
-    matching_flights = []
+    matching_flights = al.new_list()
     
     # Recorrer todos los vuelos del árbol
     def traverse_tree(node):
@@ -357,9 +350,8 @@ def req_1(catalog, carrier_code, min_delay, max_delay):
                 dep_delay = flight.get("dep_delay_min")
                 
                 # Verificar que el retraso esté en el rango
-                # Un retraso positivo indica que salió tarde
                 if dep_delay is not None and min_delay <= dep_delay <= max_delay:
-                    matching_flights.append(flight)
+                    al.add_last(matching_flights, flight)
         
         # Recorrer subárbol derecho
         traverse_tree(node["right"])
@@ -368,38 +360,63 @@ def req_1(catalog, carrier_code, min_delay, max_delay):
     traverse_tree(catalog["flights"]["root"])
     
     # Función de ordenamiento definida explícitamente
-    def sort_key_req1(f):
+    def sort_key_req1(f1, f2):
         """
         Llave de ordenamiento para req_1:
         - Primero por retraso de salida (ascendente)
         - Luego por fecha/hora real de salida
+        Retorna True si f1 debe ir antes que f2
         """
-        dep_delay = f.get("dep_delay_min")
-        if dep_delay is None:
-            delay_val = float('inf')
-        else:
-            delay_val = dep_delay
+        dep_delay1 = f1.get("dep_delay_min")
+        dep_delay2 = f2.get("dep_delay_min")
         
-        dep_dt = f.get("dep_dt")
-        if dep_dt is None:
-            dt_val = datetime.max
+        if dep_delay1 is None:
+            delay_val1 = float('inf')
         else:
-            dt_val = dep_dt
+            delay_val1 = dep_delay1
+            
+        if dep_delay2 is None:
+            delay_val2 = float('inf')
+        else:
+            delay_val2 = dep_delay2
         
-        return (delay_val, dt_val)
+        # Comparar por retraso primero
+        if delay_val1 != delay_val2:
+            return delay_val1 < delay_val2
+        
+        # Si el retraso es igual, comparar por fecha/hora de salida
+        dep_dt1 = f1.get("dep_dt")
+        dep_dt2 = f2.get("dep_dt")
+        
+        if dep_dt1 is None:
+            dt_val1 = datetime.max
+        else:
+            dt_val1 = dep_dt1
+            
+        if dep_dt2 is None:
+            dt_val2 = datetime.max
+        else:
+            dt_val2 = dep_dt2
+        
+        return dt_val1 < dt_val2
     
-    # Ordenar por retraso ascendente (menor a mayor)
-    # Si hay empate en retraso, ordenar por fecha y hora REAL de salida cronológicamente
-    matching_flights.sort(key=sort_key_req1)
+    # Ordenar usando el método de array_list (puedes elegir el algoritmo)
+    matching_flights = al.merge_sort(matching_flights, sort_key_req1)
     
     end = get_time()
     exec_time = delta_time(start, end)
     
-    total_flights = len(matching_flights)
+    total_flights = al.size(matching_flights)
     
     # Preparar vuelos para mostrar (primeros 5 y últimos 5)
-    first_5 = matching_flights[:5] if total_flights > 0 else []
-    last_5 = matching_flights[-5:] if total_flights > 5 else []
+    first_5 = []
+    last_5 = []
+    
+    for i in range(min(5, total_flights)):
+        first_5.append(al.get_element(matching_flights, i))
+    
+    for i in range(max(0, total_flights - 5), total_flights):
+        last_5.append(al.get_element(matching_flights, i))
     
     # Formatear vuelos para salida
     def format_flight(flight):
@@ -673,18 +690,9 @@ def req_4(catalog, date_initial, date_final, hour_initial, hour_final, top_n):
     Retorna el resultado del requerimiento 4
     Identifica las N aerolíneas con mayor número de vuelos en un rango de fechas
     y franja horaria, y obtiene el vuelo con menor duración de cada una.
-    
-    Args:
-        catalog: Catálogo con los datos de vuelos
-        date_initial: Fecha inicial del rango (formato YYYY-MM-DD)
-        date_final: Fecha final del rango (formato YYYY-MM-DD)
-        hour_initial: Hora inicial de la franja (formato HH:MM)
-        hour_final: Hora final de la franja (formato HH:MM)
-        top_n: Número de aerolíneas a retornar
-    
-    Returns:
-        dict con los resultados del requerimiento
     """
+    import DataStructures.List.array_list as al
+    
     start = get_time()
     
     # Parsear las fechas y horas de entrada
@@ -694,7 +702,6 @@ def req_4(catalog, date_initial, date_final, hour_initial, hour_final, top_n):
     hora_fin = parse_hhmm(hour_final)
     
     # Diccionario para contar vuelos por aerolínea
-    # Key: carrier_code, Value: dict con info de la aerolínea
     airlines_data = {}
     
     # Recorrer todos los vuelos del árbol
@@ -770,29 +777,41 @@ def req_4(catalog, date_initial, date_final, hour_initial, hour_final, top_n):
     # Iniciar recorrido desde la raíz
     traverse_tree(catalog["flights"]["root"])
     
-    # Convertir diccionario a lista
-    airlines_list = list(airlines_data.values())
+    # Convertir diccionario a array_list
+    airlines_list = al.new_list()
+    for carrier_code in airlines_data:
+        al.add_last(airlines_list, airlines_data[carrier_code])
     
     # Función de ordenamiento definida explícitamente
-    def sort_key_req4(a):
+    def sort_key_req4(a1, a2):
         """
         Llave de ordenamiento para req_4:
         - Primero por número total de vuelos (descendente)
         - Luego alfabéticamente por código de aerolínea
+        Retorna True si a1 debe ir antes que a2
         """
-        total_flights = a["total_flights"]
-        carrier_code = a["carrier_code"]
-        return (-total_flights, carrier_code)
+        total_flights1 = a1["total_flights"]
+        total_flights2 = a2["total_flights"]
+        
+        # Comparar por total de vuelos (descendente)
+        if total_flights1 != total_flights2:
+            return total_flights1 > total_flights2
+        
+        # Si son iguales, comparar alfabéticamente por código
+        carrier_code1 = a1["carrier_code"]
+        carrier_code2 = a2["carrier_code"]
+        
+        return carrier_code1 < carrier_code2
     
-    # Ordenar por número total de vuelos (descendente)
-    # Si hay empate, ordenar alfabéticamente por código de aerolínea
-    airlines_list.sort(key=sort_key_req4)
+    # Ordenar usando el método de array_list
+    airlines_list = al.merge_sort(airlines_list, sort_key_req4)
     
     # Tomar solo las top N aerolíneas
-    top_airlines = airlines_list[:top_n]
-    
-    # Calcular promedios para cada aerolínea
-    for airline in top_airlines:
+    top_airlines = []
+    for i in range(min(top_n, al.size(airlines_list))):
+        airline = al.get_element(airlines_list, i)
+        
+        # Calcular promedios
         total_flights = airline["total_flights"]
         if total_flights > 0:
             airline["avg_duration"] = airline["total_duration"] / total_flights
@@ -800,6 +819,8 @@ def req_4(catalog, date_initial, date_final, hour_initial, hour_final, top_n):
         else:
             airline["avg_duration"] = 0.0
             airline["avg_distance"] = 0.0
+        
+        top_airlines.append(airline)
     
     end = get_time()
     exec_time = delta_time(start, end)
@@ -831,7 +852,7 @@ def req_4(catalog, date_initial, date_final, hour_initial, hour_final, top_n):
         "date_range": f"{date_initial} a {date_final}",
         "time_range": f"{hour_initial} a {hour_final}",
         "top_n": top_n,
-        "total_airlines": len(airlines_list),
+        "total_airlines": al.size(airlines_list),
         "airlines": formatted_airlines
     }
 
