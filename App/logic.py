@@ -367,12 +367,30 @@ def req_1(catalog, carrier_code, min_delay, max_delay):
     # Iniciar recorrido desde la raíz
     traverse_tree(catalog["flights"]["root"])
     
+    # Función de ordenamiento definida explícitamente
+    def sort_key_req1(f):
+        """
+        Llave de ordenamiento para req_1:
+        - Primero por retraso de salida (ascendente)
+        - Luego por fecha/hora real de salida
+        """
+        dep_delay = f.get("dep_delay_min")
+        if dep_delay is None:
+            delay_val = float('inf')
+        else:
+            delay_val = dep_delay
+        
+        dep_dt = f.get("dep_dt")
+        if dep_dt is None:
+            dt_val = datetime.max
+        else:
+            dt_val = dep_dt
+        
+        return (delay_val, dt_val)
+    
     # Ordenar por retraso ascendente (menor a mayor)
     # Si hay empate en retraso, ordenar por fecha y hora REAL de salida cronológicamente
-    matching_flights.sort(key=lambda f: (
-        f.get("dep_delay_min") if f.get("dep_delay_min") is not None else float('inf'),
-        f.get("dep_dt") if f.get("dep_dt") is not None else datetime.max
-    ))
+    matching_flights.sort(key=sort_key_req1)
     
     end = get_time()
     exec_time = delta_time(start, end)
@@ -755,9 +773,20 @@ def req_4(catalog, date_initial, date_final, hour_initial, hour_final, top_n):
     # Convertir diccionario a lista
     airlines_list = list(airlines_data.values())
     
+    # Función de ordenamiento definida explícitamente
+    def sort_key_req4(a):
+        """
+        Llave de ordenamiento para req_4:
+        - Primero por número total de vuelos (descendente)
+        - Luego alfabéticamente por código de aerolínea
+        """
+        total_flights = a["total_flights"]
+        carrier_code = a["carrier_code"]
+        return (-total_flights, carrier_code)
+    
     # Ordenar por número total de vuelos (descendente)
     # Si hay empate, ordenar alfabéticamente por código de aerolínea
-    airlines_list.sort(key=lambda a: (-a["total_flights"], a["carrier_code"]))
+    airlines_list.sort(key=sort_key_req4)
     
     # Tomar solo las top N aerolíneas
     top_airlines = airlines_list[:top_n]
