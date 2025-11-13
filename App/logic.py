@@ -1054,8 +1054,8 @@ def req_6(catalog, date_initial, date_final, min_distance, max_distance, top_m):
             else:
                 info = me.get_value(entry)
 
-            lt.add_last(info["delays"], delay)
-            lt.add_last(info["flights"], flight)
+            al.add_last(info["delays"], delay)
+            al.add_last(info["flights"], flight)
 
     # Construimos una lista de aerolíneas con sus métricas
     # lista con TODOS los "info"
@@ -1127,7 +1127,7 @@ def req_6(catalog, date_initial, date_final, min_distance, max_distance, top_m):
     def sort_airlines(a):
         return (a["std_delay"], a["avg_delay"])
 
-    lt.quick_sort(airlines_list, sort_crit=sort_airlines)
+    al.quick_sort(airlines_list, sort_crit=sort_airlines)
 
     # Tomar el top de M más estables
     top_airlines = al.sub_list(airlines_list, 0, top_m)
