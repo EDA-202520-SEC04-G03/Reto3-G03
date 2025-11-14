@@ -6,6 +6,7 @@ from datetime import datetime, date, time as dtime, timedelta
 import DataStructures.List.array_list as al
 import DataStructures.List.single_linked_list as sll
 import DataStructures.Map.map_separate_chaining as mp
+import DataStructures.Map.map_entry as me
 import DataStructures.Tree.binary_search_tree as bst
 import DataStructures.Tree.red_black_tree as rbt 
 import DataStructures.Priority_queue.priority_queue as pq
@@ -587,18 +588,20 @@ def req_3(catalog, carrier_code, dest_code, min_distance, max_distance):
     # Obtenemos TODOS los valores del RBT en orden
     all_values_list = rbt.values(catalog["flights"], None, None)
 
-    size_values = sll.size(all_values_list)
-    for i in range(size_values):
-        flight = sll.get_element(all_values_list, i)
+    node = all_values_list["first"]
+    while node is not None:
+        flight = node["info"]
 
         if flight is not None:
             carrier = flight["carrier"]
             dest = flight["dest"]
             dist = flight["distance_mi"]
 
-            if (carrier == carrier_code and dest == dest_code and dist is not None and min_distance <= dist <= max_distance):
+            # Asumimos que dist ya es float o None
+            if carrier == carrier_code and dest == dest_code and dist != "Unknown" and min_distance <= dist <= max_distance:
                 al.add_last(matching_flights, flight)
 
+        node = node["next"]
     # Ordenar usando quick_sort
     # Definimos sort_criteria para req3
     def sort_criteria_req3(f1, f2):
@@ -621,11 +624,11 @@ def req_3(catalog, carrier_code, dest_code, min_distance, max_distance):
             return t1 < t2
 
         if d1 == "Unknown":
-            # f1 no tiene distancia, f2 sí -> f1 debe ir DESPUÉS de f2
+            # f1 no tiene distancia, f2 sí f1 debe ir DESPUÉS de f2
             return False
 
         if d2 == "Unknown":
-            # f2 no tiene distancia, f1 sí -> f1 debe ir ANTES de f2
+            # f2 no tiene distancia, f1 sí f1 debe ir ANTES de f2
             return True
 
         if d1 < d2:
@@ -640,17 +643,15 @@ def req_3(catalog, carrier_code, dest_code, min_distance, max_distance):
 
     end = get_time()
     exec_time = delta_time(start, end)
+
     total_flights = al.size(matching_flights)
 
-
-    # Si hay más de 10, devolver primeros 5 y últimos 5
     if total_flights > 10:
         first_5 = al.sub_list(matching_flights, 0, 5)["elements"]
         last_5 = al.sub_list(matching_flights, total_flights - 5, 5)["elements"]
     else:
-        # Si hay 10 o menos, se pueden mostrar todos (la vista decide cómo imprimir)
-        first_5 = matching_flights
-        last_5 = matching_flights
+        first_5 = matching_flights["elements"]
+        last_5 = matching_flights["elements"]
 
     def format_flight(flight):
         dist = flight["distance_mi"]
@@ -670,7 +671,7 @@ def req_3(catalog, carrier_code, dest_code, min_distance, max_distance):
 
     for f in first_5:
         al.add_last(first_5_formatted, format_flight(f))
-    for f in first_5:
+    for f in last_5:
         al.add_last(last_5_formatted, format_flight(f))
 
     return {
@@ -1049,18 +1050,16 @@ def req_6(catalog, date_initial, date_final, min_distance, max_distance, top_m):
 
     # Aca creamos un ssl con los values de los vuelos    
     all_values_list = rbt.values(catalog["flights"], None, None)
-    size_values = sll.size(all_values_list)
-
-    for i in range(size_values):
-        flight = sll.get_element(all_values_list, i)
+    node = all_values_list["first"]
+    while node is not None:
+        flight = node["info"]
 
         flight_date = flight["date"]
         dist = flight["distance_mi"]
         carrier = flight["carrier"]
         delay = flight["dep_delay_min"]
 
-        # Filtro por rango de fechas y distancia, con datos válidos
-        if flight_date != "Unknown" and carrier != "Unknown" and dist != "Unknown" and delay != "Unknown" and fecha_ini != "Unknown" and fecha_fin != "Unknown" and fecha_ini <= flight_date <= fecha_fin and min_distance <= dist <= max_distance:
+        if (flight_date != "Unknown" and carrier != "Unknown" and dist != "Unknown" and delay != "Unknown" and fecha_ini != "Unknown" and fecha_fin != "Unknown" and fecha_ini <= flight_date <= fecha_fin and min_distance <= dist <= max_distance):
 
             entry = mp.get(airlines_data, carrier)
 
@@ -1073,32 +1072,34 @@ def req_6(catalog, date_initial, date_final, min_distance, max_distance, top_m):
                 }
                 mp.put(airlines_data, carrier, info)
             else:
-                info = me.get_value(entry)
+                info = entry
 
             al.add_last(info["delays"], delay)
             al.add_last(info["flights"], flight)
 
+        node = node["next"]
+
     # Construimos una lista de aerolíneas con sus métricas
-    # lista con TODOS los "info"
-    airlines_values = mp.value_set(airlines_data)
-    size_vals = sll.size(airlines_values)
+    airlines_values = mp.value_set(airlines_data)  
+    size_vals = al.size(airlines_values)
 
     airlines_list = al.new_list()
 
-    for i in range(size_vals):
-        info = mp.get_element(airlines_values, i)
+    for i in range(0, size_vals):
+        info = al.get_element(airlines_values, i)  
         carrier_code = info["carrier_code"]
 
         delays = info["delays"]
         n = al.size(delays)
+
         if n != 0:
             # Cálculo de promedio y desviación estándar
             sum_delay = 0.0
             sum_sq = 0.0
-            for j in range(n):
+            for j in range(0, n):  
                 d = al.get_element(delays, j)
                 sum_delay += d
-                sum_sq += d**2
+                sum_sq += d ** 2
 
             avg_delay = sum_delay / n
             variance = (sum_sq / n) - (avg_delay * avg_delay)
@@ -1111,7 +1112,7 @@ def req_6(catalog, date_initial, date_final, min_distance, max_distance, top_m):
             best_diff = None
 
             f = al.size(info["flights"])
-            for j in range(f):
+            for j in range(0, f):  
                 flight = al.get_element(info["flights"], j)
                 d = flight["dep_delay_min"]
                 if d != "Unknown":
@@ -1126,32 +1127,45 @@ def req_6(catalog, date_initial, date_final, min_distance, max_distance, top_m):
                         elif diff == best_diff:
                             # Desempate: fecha-hora real de salida más temprana
                             dep_dt = flight["dep_dt"]
-                            if best_flight != None:
-                                best_dep_dt = best_flight["dep_dt"] 
-                            else: 
+                            if best_flight is not None:
+                                best_dep_dt = best_flight["dep_dt"]
+                            else:
                                 best_dep_dt = None
-                            if dep_dt != "Unknown" and best_dep_dt != None and dep_dt < best_dep_dt:
+                            if (
+                                dep_dt != "Unknown"
+                                and best_dep_dt is not None
+                                and dep_dt < best_dep_dt
+                            ):
                                 best_flight = flight
 
-                al.add_last(airlines_list, {
-                    "carrier_code": carrier_code,
-                    "airline_name": info["airline_name"],
-                    "total_flights": n,
-                    "avg_delay": avg_delay,
-                    "std_delay": std_delay,
-                    "best_flight": best_flight
-                })
-                
+            al.add_last(airlines_list, {
+                "carrier_code": carrier_code,
+                "airline_name": info["airline_name"],
+                "total_flights": n,
+                "avg_delay": avg_delay,
+                "std_delay": std_delay,
+                "best_flight": best_flight
+            })
 
     # Ordenar por estabilidad (desviación estándar ascendente),
     # luego por promedio de retraso ascendente
-    def sort_airlines(a):
-        return (a["std_delay"], a["avg_delay"])
+    def sort_airlines(a, b):
+    # Primer criterio: std_delay
+        if a["std_delay"] < b["std_delay"]:
+            return True
+        if a["std_delay"] > b["std_delay"]:
+            return False
+
+    # Empate: segundo criterio: avg_delay
+        return a["avg_delay"] < b["avg_delay"]
 
     al.quick_sort(airlines_list, sort_crit=sort_airlines)
 
     # Tomar el top de M más estables
-    top_airlines = al.sub_list(airlines_list, 0, top_m)
+    if al.size(airlines_list) < top_m:
+        top_airlines = airlines_list
+    else:
+        top_airlines = al.sub_list(airlines_list, 0, top_m)
 
     end = get_time()
     exec_time = delta_time(start, end)
@@ -1180,7 +1194,7 @@ def req_6(catalog, date_initial, date_final, min_distance, max_distance, top_m):
         }
 
     formatted_airlines = al.new_list()
-    for a in top_airlines:
+    for a in top_airlines["elements"]:
         al.add_last(formatted_airlines, format_airline(a))
 
     return {
