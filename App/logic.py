@@ -461,7 +461,7 @@ def req_2(catalog, dest_code, min_early, max_early):
         max_early = tmp
 
     # Convertimos el rango de anticipo positivo a rango de "delay" negativo
-    # Ej: [10, 30] -> arr_delay_min en [-30, -10]
+    
     delay_min = -max_early
     delay_max = -min_early
 
@@ -519,14 +519,14 @@ def req_2(catalog, dest_code, min_early, max_early):
             arr_dt2 = datetime.max
         return arr_dt1 < arr_dt2
 
-    # Ordenar usando merge_sort de array_list
+    # Ordenar usando merge_sort de array_list porque es el más god 
     matching_flights = al.merge_sort(matching_flights, sort_key_req2)
 
     end = get_time()
     exec_time = delta_time(start, end)
     total_flights = al.size(matching_flights)
 
-    # Primeros 5 y últimos 5 usando array_list, sin slicing
+    # Primeros 5 y últimos 5 usando array_list
     first_5 = al.new_list()
     last_5 = al.new_list()
     for i in range(min(5, total_flights)):
