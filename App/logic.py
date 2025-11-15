@@ -699,7 +699,6 @@ def req_4(catalog, date_initial, date_final, hour_initial, hour_final, top_n):
     Identifica las N aerolíneas con mayor número de vuelos en un rango de fechas
     y franja horaria, y obtiene el vuelo con menor duración de cada una.
     """
-    import DataStructures.List.array_list as al
     
     start = get_time()
     
@@ -709,8 +708,8 @@ def req_4(catalog, date_initial, date_final, hour_initial, hour_final, top_n):
     hora_ini = parse_hhmm(hour_initial)
     hora_fin = parse_hhmm(hour_final)
     
-    # Diccionario para contar vuelos por aerolínea
-    airlines_data = {}
+    # Map para contar vuelos por aerolínea
+    airlines_data = mp.new_map(2048, 0.8)
     
     # Recorrer todos los vuelos del árbol
     def traverse_tree(node):
@@ -729,9 +728,10 @@ def req_4(catalog, date_initial, date_final, hour_initial, hour_final, top_n):
             duration = flight.get("duration_min")
             
             # Verificar que tengamos todos los datos necesarios
-            if (flight_date is not None and sched_dep_dt is not None and 
+            if (flight_date != "Unknown" and
+                sched_dep_dt != "Unknown" and
                 carrier is not None and carrier != "Unknown" and
-                duration is not None):
+                duration is not None and duration != "Unknown"):
                 
                 # Verificar que la fecha esté en el rango
                 if fecha_ini <= flight_date <= fecha_fin:
@@ -744,9 +744,10 @@ def req_4(catalog, date_initial, date_final, hour_initial, hour_final, top_n):
                     
                     # Verificar que la hora esté en la franja
                     if hora_ini <= flight_time <= hora_fin:
-                        # Si la aerolínea no está en el diccionario, inicializarla
-                        if carrier not in airlines_data:
-                            airlines_data[carrier] = {
+                        # Obtener/crear la entrada en el mapa para esta aerolínea
+                        entry = mp.get(airlines_data, carrier)
+                        if entry is None:
+                            info = {
                                 "carrier_code": carrier,
                                 "airline_name": flight.get("airline_name") or "Unknown",
                                 "total_flights": 0,
@@ -754,30 +755,36 @@ def req_4(catalog, date_initial, date_final, hour_initial, hour_final, top_n):
                                 "total_distance": 0.0,
                                 "shortest_flight": None
                             }
+                            mp.put(airlines_data, carrier, info)
+                        else:
+                            info = entry
                         
                         # Incrementar contador de vuelos
-                        airlines_data[carrier]["total_flights"] += 1
+                        info["total_flights"] += 1
                         
                         # Acumular duración
-                        airlines_data[carrier]["total_duration"] += duration
+                        info["total_duration"] += duration
                         
                         # Acumular distancia si existe
                         distance = flight.get("distance_mi")
                         if distance is not None:
-                            airlines_data[carrier]["total_distance"] += distance
+                            info["total_distance"] += distance
                         
                         # Actualizar vuelo con menor duración
-                        current_shortest = airlines_data[carrier]["shortest_flight"]
+                        current_shortest = info["shortest_flight"]
                         if current_shortest is None:
-                            airlines_data[carrier]["shortest_flight"] = flight
+                            info["shortest_flight"] = flight
                         else:
                             current_duration = current_shortest.get("duration_min")
                             if duration < current_duration:
-                                airlines_data[carrier]["shortest_flight"] = flight
+                                info["shortest_flight"] = flight
                             elif duration == current_duration:
                                 # Desempate por fecha-hora programada de salida
-                                if sched_dep_dt < current_shortest.get("sched_dep_dt"):
-                                    airlines_data[carrier]["shortest_flight"] = flight
+                                current_dt = current_shortest.get("sched_dep_dt")
+                                if (current_dt is not None and
+                                    sched_dep_dt is not None and
+                                    sched_dep_dt < current_dt):
+                                    info["shortest_flight"] = flight
         
         # Recorrer subárbol derecho
         traverse_tree(node["right"])
@@ -785,19 +792,15 @@ def req_4(catalog, date_initial, date_final, hour_initial, hour_final, top_n):
     # Iniciar recorrido desde la raíz
     traverse_tree(catalog["flights"]["root"])
     
-    # Convertir diccionario a array_list
+    # Obtener valores del mapa como array_list
+    airlines_values = mp.value_set(airlines_data)
     airlines_list = al.new_list()
-    for carrier_code in airlines_data:
-        al.add_last(airlines_list, airlines_data[carrier_code])
+    n_airlines = al.size(airlines_values)
+    for i in range(n_airlines):
+        al.add_last(airlines_list, al.get_element(airlines_values, i))
     
     # Función de ordenamiento definida explícitamente
     def sort_key_req4(a1, a2):
-        """
-        Llave de ordenamiento para req_4:
-        - Primero por número total de vuelos (descendente)
-        - Luego alfabéticamente por código de aerolínea
-        Retorna True si a1 debe ir antes que a2
-        """
         total_flights1 = a1["total_flights"]
         total_flights2 = a2["total_flights"]
         
